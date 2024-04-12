@@ -1,0 +1,11 @@
+[Unit]
+Description = Overland receiver
+[Service]
+PrivateTmp=false
+ExecStart=/bin/sh -c "go run /tmp/overlandreceiver.go 2>>/var/log/overlandreceiver/error.log"
+User=overland
+Group=overland
+SyslogIdentifier=overlandreceiver
+Restart=on-failure
+[Install]
+WantedBy=default.target
