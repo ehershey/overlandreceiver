@@ -1,6 +1,6 @@
 module github.com/ehershey/overlandreceiver
 
-go 1.22.2
+go 1.21
 
 require (
 	github.com/davecgh/go-spew v1.1.1
