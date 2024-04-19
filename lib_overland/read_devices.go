@@ -1,22 +1,26 @@
 package lib_overland
 
-// autoupdate_version = 77
+// autoupdate_version = 85
 
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/davecgh/go-spew/spew"
 	client "github.com/influxdata/influxdb1-client/v2"
 )
 
 func Read_devices() []Device {
+	if influxdb_uri == "" {
+		log.Fatalf("no OVERLAND_INFLUXDB_URI env var set")
+	}
 
 	database := "ernie_org"
 	measurement := "battery"
 
 	c, err := client.NewHTTPClient(client.HTTPConfig{
-		Addr: "http://localhost:8086",
+		Addr: influxdb_uri,
 	})
 	if err != nil {
 		fmt.Println("Error creating InfluxDB Client: ", err.Error())

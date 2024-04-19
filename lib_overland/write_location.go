@@ -1,6 +1,6 @@
 package lib_overland
 
-// autoupdate_version = 72
+// autoupdate_version = 83
 
 import (
 	"context"
@@ -21,11 +21,13 @@ const gps_log_entry_source_format = "Overland (%s)"
 const gps_log_db_name = "ernie_org"
 const gps_log_collection_name = "gps_log"
 
-var db_uri = os.Getenv("OVERLAND_MONGODB_URI")
-
-const device_name = "eah13m"
+var mongodb_uri = os.Getenv("OVERLAND_MONGODB_URI")
+var influxdb_uri = os.Getenv("OVERLAND_INFLUXDB_URI")
 
 func Write_location(l location) (*gps_log_point, error) {
+	if influxdb_uri == "" {
+		log.Fatalf("no OVERLAND_INFLUXDB_URI env var set")
+	}
 
 	database := "ernie_org"
 	measurement := "battery"
@@ -48,7 +50,7 @@ func Write_location(l location) (*gps_log_point, error) {
 	log.Println(l.Properties.Timestamp)
 	log.Println("")
 	c, err := client.NewHTTPClient(client.HTTPConfig{
-		Addr: "http://localhost:8086",
+		Addr: influxdb_uri,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("Error creating InfluxDB Client: %w", err)
@@ -167,7 +169,11 @@ func (l *location) to_gps_log_point(entry_source string) (*gps_log_point, error)
 }
 
 func getCollectionByName(db_name, collection_name string) (*mongo.Client, *mongo.Collection, error) {
-	client, err := mongo.NewClient(options.Client().ApplyURI(db_uri))
+	if mongodb_uri == "" {
+		log.Fatalf("no OVERLAND_MONGODB_URI env var set")
+	}
+
+	client, err := mongo.NewClient(options.Client().ApplyURI(mongodb_uri))
 	if err != nil {
 		fmt.Println("got an error:", err)
 		return nil, nil, err

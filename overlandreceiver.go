@@ -21,7 +21,7 @@ import (
 const FilenameTemplate = "/%s/posts.txt"
 const Port = 8080
 
-const autoupdate_version = 48
+const autoupdate_version = 50
 
 var request_timeout time.Duration // incoming requests
 const request_timeout_seconds = 9
@@ -170,8 +170,6 @@ func main() {
 
 	http.HandleFunc("/overland", sentryHandler.HandleFunc(getHandler))
 
-	// http.HandleFunc("/", handler)
-	// http.HandleFunc("/overland", getHandler)
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(Port))
 	if err != nil {
 		panic(err)
@@ -182,14 +180,7 @@ func main() {
 	log.Fatal(http.Serve(listener, nil))
 }
 
-// [ ] read post data
-// [ ] append it to a file
-// [ ] test with curl
-// [ ] test with big value
-
 func UpdateDayData() {
-	//
-	// last_overland_update=db.getSiblingDB("ernie_org").daily_summary.find().sort({"latest_timestamp_by_entry_source.Overland":-1}).limit(1).toArray()[0].latest_timestamp_by_entry_source.Overland
 	datestring := time.Now().Format("2006-01-02")
 	log.Println("starting call sudo")
 	home, err := os.UserHomeDir()
