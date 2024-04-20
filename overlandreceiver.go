@@ -21,7 +21,7 @@ import (
 const FilenameTemplate = "/%s/posts.txt"
 const Port = 8080
 
-const autoupdate_version = 50
+const autoupdate_version = 51
 
 var request_timeout time.Duration // incoming requests
 const request_timeout_seconds = 9
@@ -47,7 +47,7 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "{ \"result\": \"ok\", \"battery\": \"%v\"}\n", battery)
 }
 
-func handler(w http.ResponseWriter, r *http.Request) {
+func rootHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), request_timeout)
 	defer cancel()
 	hub := sentry.GetHubFromContext(ctx)
@@ -166,7 +166,7 @@ func main() {
 
 	sentryHandler := sentryhttp.New(sentryhttp.Options{})
 
-	http.HandleFunc("/", sentryHandler.HandleFunc(handler))
+	http.HandleFunc("/", sentryHandler.HandleFunc(rootHandler))
 
 	http.HandleFunc("/overland", sentryHandler.HandleFunc(getHandler))
 
