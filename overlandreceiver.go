@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -21,7 +20,7 @@ import (
 const FilenameTemplate = "/%s/posts.txt"
 const Port = 8080
 
-const autoupdate_version = 51
+const autoupdate_version = 59
 
 var request_timeout time.Duration // incoming requests
 const request_timeout_seconds = 9
@@ -30,12 +29,13 @@ const min_foot_location_count = 7 // how many points of walking or running must 
 
 var battery string = ""
 
+// func filename() (string, error) {
 func filename() string {
-	var home string
-	if runtime.GOOS == "linux" {
-		home = "home"
-	} else {
-		home = "Users"
+	home, err := os.UserHomeDir()
+	if err != nil {
+		wrappedErr := fmt.Errorf("Error getting homedir for filename(): %w", err)
+		log.Println("got an error:", wrappedErr)
+		os.Exit(1)
 	}
 	return fmt.Sprintf(FilenameTemplate, home)
 }
@@ -168,6 +168,10 @@ func main() {
 
 	http.HandleFunc("/", sentryHandler.HandleFunc(rootHandler))
 
+	http.HandleFunc("/version", sentryHandler.HandleFunc(versionHandler))
+	http.HandleFunc("/mongodbhealth", sentryHandler.HandleFunc(mongodbhealthHandler))
+	http.HandleFunc("/influxdbhealth", sentryHandler.HandleFunc(influxdbhealthHandler))
+
 	http.HandleFunc("/overland", sentryHandler.HandleFunc(getHandler))
 
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(Port))
@@ -201,4 +205,21 @@ func UpdateDayData() {
 		log.Println(string(out))
 	}
 	log.Println("ending call sudo")
+}
+
+func versionHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("got request (%s)!\n", r.URL)
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, "{\"version\":\"%v\"}\n", autoupdate_version)
+}
+
+func mongodbhealthHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("got request (%s)!\n", r.URL)
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", autoupdate_version)
+}
+func influxdbhealthHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("got request (%s)!\n", r.URL)
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", autoupdate_version)
 }
