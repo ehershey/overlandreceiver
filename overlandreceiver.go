@@ -20,7 +20,7 @@ import (
 const FilenameTemplate = "/%s/posts.txt"
 const Port = 8080
 
-const autoupdate_version = 60
+const autoupdate_version = 62
 
 var request_timeout time.Duration // incoming requests
 const request_timeout_seconds = 9

@@ -7,7 +7,7 @@ test:
 	go test
 
 deploy: overlandreceiver
-	gcloud run deploy  --project=overland-receiver --source=. overlandreceiver
+	gcloud run deploy  --project=overland-receiver --source=. overlandreceiver --region=us-east1
 
 curl:
 	curl https://$(host)/version
