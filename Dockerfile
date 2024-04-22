@@ -1,8 +1,6 @@
 FROM golang:alpine as builder
 WORKDIR /app
 COPY . ./
-# This is where one could build the application code as well.
-#RUN apk add go
 RUN go build
 
 # https://docs.docker.com/develop/develop-images/multistage-build/#use-multi-stage-builds

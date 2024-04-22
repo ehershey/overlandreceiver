@@ -24,7 +24,7 @@ const gps_log_collection_name = "gps_log"
 var mongodb_uri = os.Getenv("OVERLAND_MONGODB_URI")
 var influxdb_uri = os.Getenv("OVERLAND_INFLUXDB_URI")
 
-func Write_location(l location) (*gps_log_point, error) {
+func Write_location(ctx context.Context, l location) (*gps_log_point, error) {
 	if influxdb_uri == "" {
 		log.Fatalf("no OVERLAND_INFLUXDB_URI env var set")
 	}
@@ -36,7 +36,7 @@ func Write_location(l location) (*gps_log_point, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Error converting location to gps_log_point: %w", err)
 	}
-	err = store_gps_point(gps_log_point)
+	err = store_gps_point(ctx,gps_log_point)
 	if err != nil {
 		// just let it go
 		log.Println("Got error storing gps point: %w", err)
@@ -111,22 +111,21 @@ func Write_location(l location) (*gps_log_point, error) {
 	return gps_log_point, nil
 }
 
-func store_gps_point(point *gps_log_point) error {
+func store_gps_point(ctx context.Context, point *gps_log_point) error {
 
 	log.Println("getting mongo collection object")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
-	client, collection, err := getCollectionByName(gps_log_db_name, gps_log_collection_name)
+	client, collection, err := getCollectionByName(ctx,gps_log_db_name, gps_log_collection_name)
 	defer client.Disconnect(ctx)
 	if err != nil {
 		return fmt.Errorf("got an error: %w", err)
 	}
-	log.Println("inserting gps point")
+	log.Println("creating insert options")
 	insert_opts := options.InsertOne()
+	log.Println("inserting gps point")
 	res, err := collection.InsertOne(ctx, point, insert_opts)
 	if err != nil {
-		return fmt.Errorf("got an error: %w", err)
+		return fmt.Errorf("got an error from InsertOne: %w", err)
 	}
 	log.Println("res: ", res)
 	return nil
@@ -168,21 +167,53 @@ func (l *location) to_gps_log_point(entry_source string) (*gps_log_point, error)
 	}, nil
 }
 
-func getCollectionByName(db_name, collection_name string) (*mongo.Client, *mongo.Collection, error) {
+func MongoDBPing(ctx context.Context) string {
+
+	client, _, err := getCollectionByName(ctx,gps_log_db_name, gps_log_collection_name)
+	defer client.Disconnect(ctx)
+	if err != nil {
+		return fmt.Sprintf("got an error from getCollectionByName(): %v", err)
+	}
+err = client.Ping(ctx,nil)
+	if err != nil {
+		return fmt.Sprintf("got an error from Ping(): %v", err)
+	}
+return "OK"
+}
+func InfluxDBPing(ctx context.Context) string {
+	c, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr: influxdb_uri,
+	})
+	if err != nil {
+		return fmt.Sprintf("Error creating InfluxDB Client: %v", err)
+	}
+	defer c.Close()
+
+dur,resp,err := c.Ping(5 * time.Second)
+	if err != nil {
+		return fmt.Sprintf("got an error from Ping(): %v", err)
+	}
+return fmt.Sprintf("response: %v, duration: %v", resp, dur)
+}
+
+func getCollectionByName(ctx context.Context, db_name, collection_name string) (*mongo.Client, *mongo.Collection, error) {
 	if mongodb_uri == "" {
 		log.Fatalf("no OVERLAND_MONGODB_URI env var set")
 	}
 
 	client, err := mongo.NewClient(options.Client().ApplyURI(mongodb_uri))
 	if err != nil {
-		fmt.Println("got an error:", err)
+		fmt.Println("got an error from NewClient():", err)
 		return nil, nil, err
 	}
 	fmt.Println("got client:", client)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 	fmt.Println("connecting")
 	err = client.Connect(ctx)
+	if err != nil {
+		fmt.Println("got an error from Connect():", err)
+		return nil, nil, err
+	}
 	collection := client.Database(db_name).Collection(collection_name)
+	fmt.Println("returning collection")
 	return client, collection, nil
 }

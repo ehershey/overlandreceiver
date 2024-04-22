@@ -20,10 +20,10 @@ import (
 const FilenameTemplate = "/%s/posts.txt"
 const Port = 8080
 
-const autoupdate_version = 62
+const autoupdate_version = 67
 
 var request_timeout time.Duration // incoming requests
-const request_timeout_seconds = 9
+const request_timeout_seconds = 5
 
 const min_foot_location_count = 7 // how many points of walking or running must be seen to re-generate activity data
 
@@ -99,7 +99,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 			saw_foot_location_count := 0
 			// battery = fmt.Sprintf("%v", json)
 			for _, location := range post.Locations {
-				gps_point, err := lib_overland.Write_location(location)
+				gps_point, err := lib_overland.Write_location(ctx, location)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					log.Println(err)
@@ -213,13 +213,17 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "{\"version\":\"%v\"}\n", autoupdate_version)
 }
 
-func mongodbhealthHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("got request (%s)!\n", r.URL)
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", autoupdate_version)
-}
 func influxdbhealthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("got request (%s)!\n", r.URL)
+	ctx, cancel := context.WithTimeout(r.Context(), request_timeout)
+	defer cancel()
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", autoupdate_version)
+	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", lib_overland.InfluxDBPing(ctx))
+}
+func mongodbhealthHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("got request (%s)!\n", r.URL)
+	ctx, cancel := context.WithTimeout(r.Context(), request_timeout)
+	defer cancel()
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", lib_overland.MongoDBPing(ctx))
 }
