@@ -23,7 +23,7 @@ const Port = 8080
 const autoupdate_version = 67
 
 var request_timeout time.Duration // incoming requests
-const request_timeout_seconds = 5
+const request_timeout_seconds = 30
 
 const min_foot_location_count = 7 // how many points of walking or running must be seen to re-generate activity data
 
@@ -41,6 +41,7 @@ func filename() string {
 }
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("got request (%s)!\n", r.URL)
 
 	log.Println("spitting out status and battery")
 	w.Header().Set("Content-Type", "application/json")
@@ -48,6 +49,7 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("got request (%s)!\n", r.URL)
 	ctx, cancel := context.WithTimeout(r.Context(), request_timeout)
 	defer cancel()
 	hub := sentry.GetHubFromContext(ctx)
@@ -82,19 +84,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("Trailing garbage in body")
 			return
 		} else {
-			log.Println(post)
-			f, err := os.OpenFile(filename(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				log.Println(err)
-				return
-			}
-			json, err := json.Marshal(post)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				log.Println(err)
-				return
-			}
+			log.Printf( "post: %v\n", post)
 
 			saw_foot_location_count := 0
 			// battery = fmt.Sprintf("%v", json)
@@ -116,22 +106,6 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 				// fmt.Println("")
 				battery = fmt.Sprintf("%.2f", location.Properties.Battery_level)
 			}
-			if _, err := f.Write(json); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				log.Println(err)
-				return
-			}
-			if _, err := f.Write([]byte("\n")); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				log.Println(err)
-				return
-			}
-			if err := f.Close(); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				log.Println(err)
-				return
-			}
-			log.Println("Wrote to file.")
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprintln(w, "{\"name\": \"E-Locations\", \"result\": \"ok\"}")
 			log.Printf("Checking whether to update day data: %d > %d?\n", saw_foot_location_count, min_foot_location_count)
@@ -193,7 +167,7 @@ func UpdateDayData() {
 		log.Println("got an error:", wrappedErr)
 		return
 	}
-	command_argv0 := fmt.Sprintf("%s/new_oura_activity.sh", home)
+	command_argv0 := fmt.Sprintf("echo %s/new_oura_activity.sh", home)
 	cmd := exec.Command(command_argv0, datestring)
 	cmd.Env = os.Environ()
 	log.Println("cmd:", cmd)
