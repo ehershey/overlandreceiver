@@ -17,7 +17,6 @@ import (
 	sentryhttp "github.com/getsentry/sentry-go/http"
 )
 
-const FilenameTemplate = "/%s/posts.txt"
 const Port = 8080
 
 const autoupdate_version = 67
@@ -28,17 +27,6 @@ const request_timeout_seconds = 30
 const min_foot_location_count = 7 // how many points of walking or running must be seen to re-generate activity data
 
 var battery string = ""
-
-// func filename() (string, error) {
-func filename() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		wrappedErr := fmt.Errorf("Error getting homedir for filename(): %w", err)
-		log.Println("got an error:", wrappedErr)
-		os.Exit(1)
-	}
-	return fmt.Sprintf(FilenameTemplate, home)
-}
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("got request (%s)!\n", r.URL)
@@ -78,13 +66,13 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		log.Println(err)
 		return
-	} else {
+}
 		if decoder.More() {
 			http.Error(w, "Trailing garbage in body", http.StatusBadRequest)
 			log.Println("Trailing garbage in body")
 			return
-		} else {
-			log.Printf( "post: %v\n", post)
+}
+		log.Printf( "post: %v\n", post)
 
 			saw_foot_location_count := 0
 			// battery = fmt.Sprintf("%v", json)
@@ -113,8 +101,6 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 				go UpdateDayData()
 			}
 		}
-	}
-}
 
 func main() {
 	request_timeout = time.Duration(request_timeout_seconds * time.Second)
@@ -129,14 +115,6 @@ func main() {
 		log.Fatalf("sentry.Init: %s", err)
 	}
 	defer sentry.Flush(2 * time.Second)
-
-	f, err := os.OpenFile(filename(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		panic(err)
-	}
-	if err := f.Close(); err != nil {
-		panic(err)
-	}
 
 	sentryHandler := sentryhttp.New(sentryhttp.Options{})
 
