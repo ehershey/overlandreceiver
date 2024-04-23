@@ -1,6 +1,6 @@
 package lib_overland
 
-// autoupdate_version = 83
+// autoupdate_version = 114
 
 import (
 	"context"
@@ -24,6 +24,9 @@ const gps_log_collection_name = "gps_log"
 var mongodb_uri = os.Getenv("OVERLAND_MONGODB_URI")
 var influxdb_uri = os.Getenv("OVERLAND_INFLUXDB_URI")
 
+var global_mongodb_client *mongo.Client
+var global_influxdb_client client.Client
+
 func Write_location(ctx context.Context, l location) (*gps_log_point, error) {
 	if influxdb_uri == "" {
 		log.Fatalf("no OVERLAND_INFLUXDB_URI env var set")
@@ -36,7 +39,7 @@ func Write_location(ctx context.Context, l location) (*gps_log_point, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Error converting location to gps_log_point: %w", err)
 	}
-	err = store_gps_point(ctx,gps_log_point)
+	err = store_gps_point(ctx, gps_log_point)
 	if err != nil {
 		// just let it go
 		log.Println("Got error storing gps point: %w", err)
@@ -49,13 +52,10 @@ func Write_location(ctx context.Context, l location) (*gps_log_point, error) {
 	log.Println(l.Properties.Wifi)
 	log.Println(l.Properties.Timestamp)
 	log.Println("")
-	c, err := client.NewHTTPClient(client.HTTPConfig{
-		Addr: influxdb_uri,
-	})
+	influxdb_client, err := getInfluxClient()
 	if err != nil {
-		return nil, fmt.Errorf("Error creating InfluxDB Client: %w", err)
+		return nil, fmt.Errorf("Error retrieving new InfluxDB Client: %w", err)
 	}
-	defer c.Close()
 
 	// q := client.NewQuery("SELECT count(value) FROM cpu", "example", "")
 	// if response, err := c.Query(q); err == nil && response.Error() == nil {
@@ -100,7 +100,7 @@ func Write_location(ctx context.Context, l location) (*gps_log_point, error) {
 	})
 	bp.AddPoint(pt)
 
-	err = c.Write(bp)
+	err = influxdb_client.Write(bp)
 	if err != nil {
 		return nil, fmt.Errorf("error writing point to influx: %v: %w", pt, err)
 	}
@@ -115,11 +115,16 @@ func store_gps_point(ctx context.Context, point *gps_log_point) error {
 
 	log.Println("getting mongo collection object")
 
-	client, collection, err := getCollectionByName(ctx,gps_log_db_name, gps_log_collection_name)
-	defer client.Disconnect(ctx)
+	mongodb_client, err := getMongoDBClient(ctx)
 	if err != nil {
-		return fmt.Errorf("got an error: %w", err)
+		wrappedErr := fmt.Errorf("got an error from getMongoDBClient(): %w", err)
+		return wrappedErr
 	}
+	fmt.Println("got client:", mongodb_client)
+
+	fmt.Println("connected client:", mongodb_client)
+	collection := mongodb_client.Database(gps_log_db_name).Collection(gps_log_collection_name)
+
 	log.Println("creating insert options")
 	insert_opts := options.InsertOne()
 	log.Println("inserting gps point")
@@ -169,51 +174,59 @@ func (l *location) to_gps_log_point(entry_source string) (*gps_log_point, error)
 
 func MongoDBPing(ctx context.Context) string {
 
-	client, _, err := getCollectionByName(ctx,gps_log_db_name, gps_log_collection_name)
-	defer client.Disconnect(ctx)
+	mongodb_client, err := getMongoDBClient(ctx)
 	if err != nil {
-		return fmt.Sprintf("got an error from getCollectionByName(): %v", err)
+		return fmt.Sprintf("got an error from getMongoDBClient(): %v", err)
 	}
-err = client.Ping(ctx,nil)
+	err = mongodb_client.Ping(ctx, nil)
 	if err != nil {
 		return fmt.Sprintf("got an error from Ping(): %v", err)
 	}
-return "OK"
+	return "OK"
 }
 func InfluxDBPing(ctx context.Context) string {
-	c, err := client.NewHTTPClient(client.HTTPConfig{
-		Addr: influxdb_uri,
-	})
+	influxdb_client, err := getInfluxClient()
 	if err != nil {
-		return fmt.Sprintf("Error creating InfluxDB Client: %v", err)
+		return fmt.Sprintf("Error getting InfluxDB Client: %v", err)
 	}
-	defer c.Close()
 
-dur,resp,err := c.Ping(5 * time.Second)
+	dur, resp, err := influxdb_client.Ping(5 * time.Second)
 	if err != nil {
 		return fmt.Sprintf("got an error from Ping(): %v", err)
 	}
-return fmt.Sprintf("response: %v, duration: %v", resp, dur)
+	return fmt.Sprintf("response: %v, duration: %v", resp, dur)
 }
 
-func getCollectionByName(ctx context.Context, db_name, collection_name string) (*mongo.Client, *mongo.Collection, error) {
+func getInfluxClient() (client.Client, error) {
+	var err error
+	if global_influxdb_client == nil {
+		log.Println("Creating new influx client")
+		global_influxdb_client, err = client.NewHTTPClient(client.HTTPConfig{
+			Addr: influxdb_uri,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("Error creating new InfluxDB Client: %w", err)
+		}
+	} else {
+		log.Println("Re-using influx client")
+	}
+	return global_influxdb_client, nil
+}
+func getMongoDBClient(ctx context.Context) (*mongo.Client, error) {
 	if mongodb_uri == "" {
 		log.Fatalf("no OVERLAND_MONGODB_URI env var set")
 	}
-
-	client, err := mongo.NewClient(options.Client().ApplyURI(mongodb_uri))
-	if err != nil {
-		fmt.Println("got an error from NewClient():", err)
-		return nil, nil, err
+	var err error
+	if global_mongodb_client == nil {
+		log.Println("Creating new mongo client")
+		global_mongodb_client, err = mongo.NewClient(options.Client().ApplyURI(mongodb_uri))
+		if err != nil {
+			fmt.Println("got an error from NewClient():", err)
+			return nil, err
+		}
+		global_mongodb_client.Connect(ctx)
+	} else {
+		log.Println("Re-using mongo client")
 	}
-	fmt.Println("got client:", client)
-	fmt.Println("connecting")
-	err = client.Connect(ctx)
-	if err != nil {
-		fmt.Println("got an error from Connect():", err)
-		return nil, nil, err
-	}
-	collection := client.Database(db_name).Collection(collection_name)
-	fmt.Println("returning collection")
-	return client, collection, nil
+	return global_mongodb_client, nil
 }

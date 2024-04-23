@@ -19,7 +19,7 @@ import (
 
 const Port = 8080
 
-const autoupdate_version = 67
+const autoupdate_version = 73
 
 var request_timeout time.Duration // incoming requests
 const request_timeout_seconds = 30
@@ -42,6 +42,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
+		fmt.Printf("creating new hub\n")
 		hub = sentry.CurrentHub().Clone()
 		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
@@ -57,6 +58,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		options...,
 	)
 	defer transaction.Finish()
+	ctx = transaction.Context()
 
 	var post lib_overland.Overlandpost
 
@@ -66,46 +68,46 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		log.Println(err)
 		return
-}
-		if decoder.More() {
-			http.Error(w, "Trailing garbage in body", http.StatusBadRequest)
-			log.Println("Trailing garbage in body")
+	}
+	if decoder.More() {
+		http.Error(w, "Trailing garbage in body", http.StatusBadRequest)
+		log.Println("Trailing garbage in body")
+		return
+	}
+	log.Printf("post: %v\n", post)
+
+	saw_foot_location_count := 0
+	// battery = fmt.Sprintf("%v", json)
+	for _, location := range post.Locations {
+		gps_point, err := lib_overland.Write_location(ctx, location)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			log.Println(err)
 			return
-}
-		log.Printf( "post: %v\n", post)
-
-			saw_foot_location_count := 0
-			// battery = fmt.Sprintf("%v", json)
-			for _, location := range post.Locations {
-				gps_point, err := lib_overland.Write_location(ctx, location)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					log.Println(err)
-					return
-				}
-				if gps_point.ActivityType == "running" || gps_point.ActivityType == "walking" {
-					saw_foot_location_count += 1
-				}
-
-				// fmt.Println(location.Properties.Device_id)
-				// fmt.Println(location.Properties.Battery_level)
-				// fmt.Println(location.Properties.Battery_state)
-				// fmt.Println(location.Properties.Wifi)
-				// fmt.Println("")
-				battery = fmt.Sprintf("%.2f", location.Properties.Battery_level)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintln(w, "{\"name\": \"E-Locations\", \"result\": \"ok\"}")
-			log.Printf("Checking whether to update day data: %d > %d?\n", saw_foot_location_count, min_foot_location_count)
-			if saw_foot_location_count > min_foot_location_count {
-				go UpdateDayData()
-			}
 		}
+		if gps_point.ActivityType == "running" || gps_point.ActivityType == "walking" {
+			saw_foot_location_count += 1
+		}
+
+		// fmt.Println(location.Properties.Device_id)
+		// fmt.Println(location.Properties.Battery_level)
+		// fmt.Println(location.Properties.Battery_state)
+		// fmt.Println(location.Properties.Wifi)
+		// fmt.Println("")
+		battery = fmt.Sprintf("%.2f", location.Properties.Battery_level)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintln(w, "{\"name\": \"E-Locations\", \"result\": \"ok\"}")
+	log.Printf("Checking whether to update day data: %d > %d?\n", saw_foot_location_count, min_foot_location_count)
+	if saw_foot_location_count > min_foot_location_count {
+		go UpdateDayData()
+	}
+}
 
 func main() {
 	request_timeout = time.Duration(request_timeout_seconds * time.Second)
 	err := sentry.Init(sentry.ClientOptions{
-		Debug:              false,
+		Debug:              true,
 		EnableTracing:      true,
 		TracesSampleRate:   1.0,
 		ProfilesSampleRate: 1.0,
@@ -115,6 +117,7 @@ func main() {
 		log.Fatalf("sentry.Init: %s", err)
 	}
 	defer sentry.Flush(2 * time.Second)
+	sentry.CaptureMessage("my message")
 
 	sentryHandler := sentryhttp.New(sentryhttp.Options{})
 
