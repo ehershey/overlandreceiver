@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -19,26 +20,25 @@ import (
 
 const Port = 8080
 
-const autoupdate_version = 73
+const autoupdate_version = 109
 
-var request_timeout time.Duration // incoming requests
-const request_timeout_seconds = 30
+var general_timeout time.Duration // used for everything
+const general_timeout_seconds = 10
 
 const min_foot_location_count = 7 // how many points of walking or running must be seen to re-generate activity data
 
 var battery string = ""
 
-func getHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("got request (%s)!\n", r.URL)
+var requiredBearer = os.Getenv("OVERLAND_REQUIRED_BEARER")
 
+func getHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("spitting out status and battery")
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, "{ \"result\": \"ok\", \"battery\": \"%v\"}\n", battery)
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("got request (%s)!\n", r.URL)
-	ctx, cancel := context.WithTimeout(r.Context(), request_timeout)
+	ctx, cancel := context.WithTimeout(r.Context(), general_timeout)
 	defer cancel()
 	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
@@ -105,7 +105,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	request_timeout = time.Duration(request_timeout_seconds * time.Second)
+	general_timeout = time.Duration(general_timeout_seconds * time.Second)
 	err := sentry.Init(sentry.ClientOptions{
 		Debug:              true,
 		EnableTracing:      true,
@@ -121,13 +121,17 @@ func main() {
 
 	sentryHandler := sentryhttp.New(sentryhttp.Options{})
 
-	http.HandleFunc("/", sentryHandler.HandleFunc(rootHandler))
+	if err := preflight(); err != nil {
+		log.Fatalf("Error running preflight checks: %v", err)
+	}
 
-	http.HandleFunc("/version", sentryHandler.HandleFunc(versionHandler))
-	http.HandleFunc("/mongodbhealth", sentryHandler.HandleFunc(mongodbhealthHandler))
-	http.HandleFunc("/influxdbhealth", sentryHandler.HandleFunc(influxdbhealthHandler))
+	http.HandleFunc("/", ernieHandleFunc(sentryHandler.HandleFunc(rootHandler)))
 
-	http.HandleFunc("/overland", sentryHandler.HandleFunc(getHandler))
+	http.HandleFunc("/version", ernieHandleFunc(sentryHandler.HandleFunc(versionHandler)))
+	http.HandleFunc("/mongodbhealth", ernieHandleFunc(sentryHandler.HandleFunc(mongoDBhealthHandler)))
+	http.HandleFunc("/influxdbhealth", ernieHandleFunc(sentryHandler.HandleFunc(influxDBhealthHandler)))
+
+	http.HandleFunc("/overland", ernieHandleFunc(sentryHandler.HandleFunc(getHandler)))
 
 	listener, err := net.Listen("tcp", ":"+strconv.Itoa(Port))
 	if err != nil {
@@ -163,22 +167,75 @@ func UpdateDayData() {
 }
 
 func versionHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("got request (%s)!\n", r.URL)
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, "{\"version\":\"%v\"}\n", autoupdate_version)
 }
 
-func influxdbhealthHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("got request (%s)!\n", r.URL)
-	ctx, cancel := context.WithTimeout(r.Context(), request_timeout)
+func influxDBhealthHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), general_timeout)
 	defer cancel()
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", lib_overland.InfluxDBPing(ctx))
+	resp, err := lib_overland.InfluxDBPing(ctx)
+	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", resp)
+	if err != nil {
+		log.Printf("Error pinging InfluxDB: %v", err)
+	}
 }
-func mongodbhealthHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("got request (%s)!\n", r.URL)
-	ctx, cancel := context.WithTimeout(r.Context(), request_timeout)
+
+func mongoDBhealthHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), general_timeout)
 	defer cancel()
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", lib_overland.MongoDBPing(ctx))
+	resp, err := lib_overland.MongoDBPing(ctx)
+	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", resp)
+	if err != nil {
+		log.Printf("Error pinging MongoDB: %v", err)
+	}
+}
+func preflight() error {
+	var errs error
+	log.Printf("Performing preflight checks\n")
+	log.Printf("InfluxDB Ping:\n")
+	ctx, cancel := context.WithTimeout(context.Background(), general_timeout)
+	defer cancel()
+	resp, err := lib_overland.InfluxDBPing(ctx)
+	if err != nil {
+		errs = err
+	}
+	log.Printf("%v\n", resp)
+	log.Printf("MongoDB Ping:\n")
+	ctx, cancel = context.WithTimeout(context.Background(), general_timeout)
+	defer cancel()
+	resp, err = lib_overland.MongoDBPing(ctx)
+	if err != nil {
+		if errs != nil {
+			errs = errors.Join(errs, err)
+		} else {
+			errs = err
+		}
+	}
+
+	if requiredBearer == "" {
+		errs = errors.Join(errs, fmt.Errorf("Missing environment variable: OVERLAND_REQUIRED_BEARER"))
+	}
+
+	log.Printf("%v\n", resp)
+	return errs
+}
+
+func ernieHandleFunc(handler http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Printf("got request (%s)!\n", r.URL)
+		passedAuth := r.Header.Get("Authorization")
+		if passedAuth == "" {
+			http.Error(w, "", 401)
+			return
+		}
+		requiredAuth := fmt.Sprintf("Bearer %s", requiredBearer)
+		if passedAuth != requiredAuth {
+			http.Error(w, "", 403)
+			return
+		}
+		handler(w, r)
+	})
 }
