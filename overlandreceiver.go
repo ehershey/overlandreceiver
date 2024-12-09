@@ -20,7 +20,7 @@ import (
 
 const Port = 8080
 
-const autoupdate_version = 109
+const autoupdate_version = 110
 
 var general_timeout time.Duration // used for everything
 const general_timeout_seconds = 10
@@ -81,7 +81,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	for _, location := range post.Locations {
 		gps_point, err := lib_overland.Write_location(ctx, location)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Println(err)
 			return
 		}
@@ -174,23 +174,29 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 func influxDBhealthHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), general_timeout)
 	defer cancel()
-	w.Header().Set("Content-Type", "application/json")
 	resp, err := lib_overland.InfluxDBPing(ctx)
-	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", resp)
 	if err != nil {
-		log.Printf("Error pinging InfluxDB: %v", err)
+		wrappedErr := fmt.Errorf("Error pinging InfluxDB: %w", err)
+		log.Println("got an error:", wrappedErr)
+		http.Error(w, wrappedErr.Error(), http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", resp)
 }
 
 func mongoDBhealthHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), general_timeout)
 	defer cancel()
-	w.Header().Set("Content-Type", "application/json")
 	resp, err := lib_overland.MongoDBPing(ctx)
-	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", resp)
 	if err != nil {
-		log.Printf("Error pinging MongoDB: %v", err)
+		wrappedErr := fmt.Errorf("Error pinging MongoDB: %w", err)
+		log.Println("got an error:", wrappedErr)
+		http.Error(w, wrappedErr.Error(), http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, "{\"health\":\"%v\"}\n", resp)
 }
 func preflight() error {
 	var errs error
