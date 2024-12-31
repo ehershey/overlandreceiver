@@ -21,3 +21,5 @@
 go.work
 overlandreceiver
 ol.env
+.DS_Store
+temp.env
