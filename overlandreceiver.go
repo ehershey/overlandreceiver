@@ -27,7 +27,7 @@ var ModuleVersion string
 
 const Port = 8080
 
-const autoupdate_version = 121
+const autoupdate_version = 122
 
 var general_timeout time.Duration // used for everything
 const general_timeout_seconds = 10
@@ -169,6 +169,7 @@ func main() {
 	}
 	log.Println("Listening on port", Port)
 	log.Println("autoupdate_version", autoupdate_version)
+	log.Println("ModuleVersion", ModuleVersion)
 
 	log.Fatal(http.Serve(listener, nil))
 }
