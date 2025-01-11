@@ -25,7 +25,7 @@ test:
 
 deploy: overlandreceiver
 	echo $(MODULE_VERSION) > VERSION.txt
-	gcloud run deploy  --project=overland-receiver --source=. overlandreceiver --region=us-east1
+	gcloud run deploy  --project=overland-receiver --source=. overlandreceiver --region=us-east1 --revision-suffix=$(MODULE_VERSION)
 	rm VERSION.txt
 
 curl:
