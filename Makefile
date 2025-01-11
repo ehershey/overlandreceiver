@@ -24,7 +24,9 @@ test:
 	go test $(GOFLAGS)
 
 deploy: overlandreceiver
+	echo $(MODULE_VERSION) > VERSION.txt
 	gcloud run deploy  --project=overland-receiver --source=. overlandreceiver --region=us-east1
+	rm VERSION.txt
 
 curl:
 	curl --header "Authorization: Bearer $(bearer)" https://$(host)/version

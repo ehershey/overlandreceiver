@@ -1,3 +1,5 @@
+git.rootprojects.org/root/go-gitver/v2 v2.0.2 h1:T+Je13wrY1jz4OPJF98HnuCNp6n2Xe2uK6/NNF6a4+0=
+git.rootprojects.org/root/go-gitver/v2 v2.0.2/go.mod h1:ur82M/jZcvr1WWihyVtNEgDBqIjo22o56wcVHeVJFh8=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/getsentry/sentry-go v0.31.1 h1:ELVc0h7gwyhnXHDouXkhqTFSO5oslsRDk0++eyE0KJ4=

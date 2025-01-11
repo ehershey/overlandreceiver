@@ -2,7 +2,11 @@ FROM golang:alpine AS builder
 WORKDIR /app
 COPY . ./
 RUN apk add make
-RUN make
+# Fake out make
+RUN mkdir -p .git/logs/ .git/refs/tags/
+RUN cp /dev/null .git/logs/HEAD
+RUN cp /dev/null .git/refs/tags/fake
+RUN make MODULE_VERSION=$(cat VERSION.txt)
 
 # https://docs.docker.com/develop/develop-images/multistage-build/#use-multi-stage-builds
 FROM alpine:latest
