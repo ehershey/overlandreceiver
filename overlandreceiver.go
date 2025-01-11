@@ -1,15 +1,20 @@
+//go:build BuildArgsIncluded
+// +build BuildArgsIncluded
+
 package main
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -18,9 +23,11 @@ import (
 	sentryhttp "github.com/getsentry/sentry-go/http"
 )
 
+var ModuleVersion string
+
 const Port = 8080
 
-const autoupdate_version = 110
+const autoupdate_version = 120
 
 var general_timeout time.Duration // used for everything
 const general_timeout_seconds = 10
@@ -105,6 +112,29 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+
+	versionFlag := false
+	flag.BoolVar(&versionFlag, "version", false, "Display version and exit")
+	flag.Parse()
+
+	bi, ok := debug.ReadBuildInfo()
+	if !ok || ModuleVersion == "" {
+		panic("No embedded build info")
+	}
+
+	for _, setting := range bi.Settings {
+		if setting.Key == "vcs.modified" {
+			if setting.Value == "true" {
+				ModuleVersion = fmt.Sprintf("%s-dirty", ModuleVersion)
+			}
+		}
+	}
+
+	if versionFlag {
+		fmt.Printf("Version: %v\n", ModuleVersion)
+		os.Exit(0)
+	}
+
 	general_timeout = time.Duration(general_timeout_seconds * time.Second)
 	err := sentry.Init(sentry.ClientOptions{
 		Debug:              true,
@@ -168,7 +198,7 @@ func UpdateDayData() {
 
 func versionHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, "{\"version\":\"%v\"}\n", autoupdate_version)
+	fmt.Fprintf(w, "{\"version\":\"%v\"}\n", ModuleVersion)
 }
 
 func influxDBhealthHandler(w http.ResponseWriter, r *http.Request) {

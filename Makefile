@@ -1,6 +1,13 @@
 bearer=$(shell grep OVERLAND_REQUIRED_BEARER temp.env | cut -f2 -d=)
+
+MODULE_VERSION = $(shell git describe --tags)
+GOFLAGS = -tags BuildArgsIncluded
+
+LDFLAGS = -X \"main.ModuleVersion=$(MODULE_VERSION)\"
+
+
 overlandreceiver: *.go */*.go test
-	go build
+	go build -ldflags "$(LDFLAGS)" $(GOFLAGS)
 
 docker-build: overlandreceiver start.sh
 	docker build -t overlandreceiver .
@@ -14,7 +21,7 @@ temp.env:
 .PHONY: deploy test docker-build
 
 test:
-	go test
+	go test $(GOFLAGS)
 
 deploy: overlandreceiver
 	gcloud run deploy  --project=overland-receiver --source=. overlandreceiver --region=us-east1
