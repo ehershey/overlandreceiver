@@ -27,7 +27,7 @@ var ModuleVersion string
 
 const Port = 8080
 
-const autoupdate_version = 120
+const autoupdate_version = 121
 
 var general_timeout time.Duration // used for everything
 const general_timeout_seconds = 10
@@ -137,11 +137,11 @@ func main() {
 
 	general_timeout = time.Duration(general_timeout_seconds * time.Second)
 	err := sentry.Init(sentry.ClientOptions{
-		Debug:              true,
-		EnableTracing:      true,
-		TracesSampleRate:   1.0,
-		ProfilesSampleRate: 1.0,
-		AttachStacktrace:   true,
+		Debug:            true,
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		// ProfilesSampleRate: 1.0,
+		AttachStacktrace: true,
 	})
 	if err != nil {
 		log.Fatalf("sentry.Init: %s", err)
