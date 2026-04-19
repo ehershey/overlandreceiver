@@ -6,7 +6,7 @@ GOFLAGS = -tags BuildArgsIncluded
 LDFLAGS = -X \"main.ModuleVersion=$(MODULE_VERSION)\"
 
 
-overlandreceiver: *.go */*.go test Makefile .git/logs/HEAD .git/refs/tags/*
+overlandreceiver: *.go */*.go test Makefile .git/logs/HEAD $(wildcard .git/refs/tags/*)
 	go build -ldflags "$(LDFLAGS)" $(GOFLAGS)
 
 docker-build: overlandreceiver start.sh
