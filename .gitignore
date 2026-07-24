@@ -24,3 +24,4 @@ ol.env
 .DS_Store
 temp.env
 long_request.json
+VERSION.txt
